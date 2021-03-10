@@ -17,7 +17,7 @@ from torch.autograd import Variable
 from torch.autograd import Function
 import torch.nn.functional as F
 from collections import OrderedDict
-from torch.legacy.nn import SpatialCrossMapLRN as SpatialCrossMapLRNOld
+#from torch.legacy.nn import SpatialCrossMapLRN as SpatialCrossMapLRNOld
 from itertools import product as product
 from .prototxt import *
 from .detection import Detection, MultiBoxLoss
@@ -266,6 +266,35 @@ class Flatten(nn.Module):
         return 'Flatten(axis=%d)' % self.axis
 
 
+class LRN(nn.Module):
+    def __init__(self, local_size=1, alpha=1.0, beta=0.75, ACROSS_CHANNELS=False):
+        super(LRN, self).__init__()
+        self.ACROSS_CHANNELS = ACROSS_CHANNELS
+        if self.ACROSS_CHANNELS:
+            self.average=nn.AvgPool3d(kernel_size=(local_size, 1, 1), 
+                    stride=1,
+                    padding=(int((local_size-1.0)/2), 0, 0)) 
+        else:
+            self.average=nn.AvgPool2d(kernel_size=local_size,
+                    stride=1,
+                    padding=int((local_size-1.0)/2))
+        self.alpha = alpha
+        self.beta = beta
+    
+    
+    def forward(self, x):
+        if self.ACROSS_CHANNELS:
+            div = x.pow(2).unsqueeze(1)
+            div = self.average(div).squeeze(1)
+            div = div.mul(self.alpha).add(1.0).pow(self.beta)
+        else:
+            div = x.pow(2)
+            div = self.average(div)
+            div = div.mul(self.alpha).add(1.0).pow(self.beta)
+        x = x.div(div)
+        return x
+
+"""
 # function interface, internal, do not use this one!!!
 class LRNFunc(Function):
     def __init__(self, size, alpha=1e-4, beta=0.75, k=1):
@@ -275,15 +304,17 @@ class LRNFunc(Function):
         self.beta = beta
         self.k = k
 
-    def forward(self, input):
-        self.save_for_backward(input)
-        self.lrn = SpatialCrossMapLRNOld(self.size, self.alpha, self.beta, self.k)
-        self.lrn.type(input.type())
-        return self.lrn.forward(input)
+    @staticmethod
+    def forward(ctx, input, size, alpha, beta, k):
+        ctx.save_for_backward(input)
+        ctx.lrn = LRN(ctx.size, ctx.alpha, ctx.beta) #, self.k)
+        ctx.lrn.type(input.type())
+        return ctx.lrn.forward(input)
 
-    def backward(self, grad_output):
-        input, = self.saved_tensors
-        return self.lrn.backward(input, grad_output)
+    @staticmethod
+    def backward(ctx, grad_output):
+        input, = ctx.saved_tensors
+        return ctx.lrn.backward(input, grad_output)
 
 
 # use this one instead
@@ -296,11 +327,13 @@ class LRN(nn.Module):
         self.k = k
 
     def forward(self, input):
-        return LRNFunc(self.size, self.alpha, self.beta, self.k)(input)
+        #return LRNFunc.apply(self.size, self.alpha, self.beta, self.k)(input)
+        #return LRNFunc.apply(input, self.size, self.alpha, self.beta, self.k)
+
 
     def __repr__(self):
         return 'LRN(size=%d, alpha=%f, beta=%f, k=%d)' % (self.size, self.alpha, self.beta, self.k)
-
+"""
 
 class Reshape(nn.Module):
     def __init__(self, dims):
