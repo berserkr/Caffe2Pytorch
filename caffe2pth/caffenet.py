@@ -5,6 +5,9 @@ Changes done by Jen-tse Huang on 2018.12.13:
     Add the support of PReLU layer.
     Add the support of python3.
     Format the output of self-define layers.
+
+Changes done by Luis Bathen on 2021.03.08:
+    Added a different implementation of LRN and removed the reference to SpatialCrossMapLRNOld
 """
 
 import random
@@ -14,10 +17,8 @@ import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
 from torch.autograd import Variable
-from torch.autograd import Function
 import torch.nn.functional as F
 from collections import OrderedDict
-#from torch.legacy.nn import SpatialCrossMapLRN as SpatialCrossMapLRNOld
 from itertools import product as product
 from .prototxt import *
 from .detection import Detection, MultiBoxLoss
@@ -266,6 +267,7 @@ class Flatten(nn.Module):
         return 'Flatten(axis=%d)' % self.axis
 
 
+#From https://github.com/pytorch/pytorch/issues/653#issuecomment-326851808
 class LRN(nn.Module):
     def __init__(self, local_size=1, alpha=1.0, beta=0.75, ACROSS_CHANNELS=False):
         super(LRN, self).__init__()
@@ -294,46 +296,6 @@ class LRN(nn.Module):
         x = x.div(div)
         return x
 
-"""
-# function interface, internal, do not use this one!!!
-class LRNFunc(Function):
-    def __init__(self, size, alpha=1e-4, beta=0.75, k=1):
-        super(LRNFunc, self).__init__()
-        self.size = size
-        self.alpha = alpha
-        self.beta = beta
-        self.k = k
-
-    @staticmethod
-    def forward(ctx, input, size, alpha, beta, k):
-        ctx.save_for_backward(input)
-        ctx.lrn = LRN(ctx.size, ctx.alpha, ctx.beta) #, self.k)
-        ctx.lrn.type(input.type())
-        return ctx.lrn.forward(input)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        input, = ctx.saved_tensors
-        return ctx.lrn.backward(input, grad_output)
-
-
-# use this one instead
-class LRN(nn.Module):
-    def __init__(self, size, alpha=1e-4, beta=0.75, k=1):
-        super(LRN, self).__init__()
-        self.size = size
-        self.alpha = alpha
-        self.beta = beta
-        self.k = k
-
-    def forward(self, input):
-        #return LRNFunc.apply(self.size, self.alpha, self.beta, self.k)(input)
-        #return LRNFunc.apply(input, self.size, self.alpha, self.beta, self.k)
-
-
-    def __repr__(self):
-        return 'LRN(size=%d, alpha=%f, beta=%f, k=%d)' % (self.size, self.alpha, self.beta, self.k)
-"""
 
 class Reshape(nn.Module):
     def __init__(self, dims):
